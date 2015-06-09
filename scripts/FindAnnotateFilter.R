@@ -21,7 +21,7 @@
 # a triple hash (### description xyz) denotes a 'section header' in the code while (# comments..) denotes a more simple comment
 
 ### dependencies
-creds <- list(username="pjs90", password="pjs2810")
+creds <- list(username="***", password="***")
 library(optparse)
 library(ggplot2)
 library(oligo)
