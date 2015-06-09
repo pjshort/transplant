@@ -21,7 +21,6 @@
 # a triple hash (### description xyz) denotes a 'section header' in the code while (# comments..) denotes a more simple comment
 
 ### dependencies
-creds <- list(username="***", password="***")
 library(optparse)
 library(ggplot2)
 library(oligo)
@@ -37,11 +36,18 @@ library(genefilter)
 options(stringsAsFactors = FALSE)
 allowWGCNAThreads()
 
+library(yaml)
+config = yaml.load_file("../config.yml")
+creds <- list(username=config$credentials$username, password=config$credentials$pass)
+
+
+dbConnect(PgSQL(), host=config$db$host, dbname=config$db$name, user=config$db$user, password=config$db$pass)
+
 ### command line options
 option_list <- list(
   make_option("--search_path", default="../data/TransplantCELs/batch1_2009",
               help="Top level directory to start recursive search for *.CEL files."),
-  make_option("--out", default="../data/transplant_eset.Rdata",
+  make_option("--out", default="../data/transplant_eset.RData",
               help="Location to save the ExpressionSet object. Defaults to ./eset.Rdata"),
   make_option("--cell_type", default="CD8",
               help="Restrict by cell type (e.g. CD8, CD4, etc). Defaults to CD8."),
