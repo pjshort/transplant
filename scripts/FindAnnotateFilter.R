@@ -40,9 +40,6 @@ library(yaml)
 config = yaml.load_file("../config.yml")
 creds <- list(username=config$credentials$username, password=config$credentials$pass)
 
-
-dbConnect(PgSQL(), host=config$db$host, dbname=config$db$name, user=config$db$user, password=config$db$pass)
-
 ### command line options
 option_list <- list(
   make_option("--search_path", default="../data/TransplantCELs/batch1_2009",
