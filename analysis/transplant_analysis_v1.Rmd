@@ -1,0 +1,281 @@
+---
+title: "Transplant Gene Expression Association with Clinical Outcomes"
+author: "Patrick Short"
+date: "June 1st - June 10th, 2015"
+output: html_document
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.align = "center",
+                      echo=FALSE, warning=FALSE, message=FALSE)
+library(png)
+library(grid)
+library(knitr)
+```
+
+```{r scripts and dependencies, include=FALSE}
+source("../scripts/eset_tools.R")
+source("../scripts/cluster_tools.R")
+library(stringr)
+library(WGCNA)
+```
+
+# Introduction
+
+This R markdown focuses on start to finish analysis of a discovery set of gene expression profiles with associated clinical outcomes. Gene expression sets will be decomposed into gene-modules (collections of genes) using the Weight Gene Coexpression Network Analysis (WGCNA) package. Any correlation between gene module and clinical outcome can be validated statistcally by running the same workflow in an independent set and biologically with GO term enrichment analysis and further experimentation.
+
+Several inputs are necessary for this analysis:
+1. CEL file for each patient in the cohort set. These will be checked to contain a Tritan ID (between 600 and 699).
+2. Clinical outcomes, or phenotype data in CSV format. One column of this data_set will be matched against the Tritan ID inferred from the CEL file names.
+3. Soft thresholding parameter (which should be determined using WGCNA tools).
+4. Gene and probeset annotations for Affy Gene ST 1.0 array.
+
+First, we use Robust Multi-array Average (RMA) from the oligo package to build normalized expression sets from the CEL files. We use just batches 2 and 3 (which together contain 32 samples) as QC on revealed large batch effects between batch 1 and batches 2 and 3 (See figure below for PCA plot). We will also filter the genes and probes such that we have a single probe per gene and only use genes with entrez annotations. This will make downstream analysis much more effective - correlation of clinical outcome with an unannotated gene is significantly less useful than an annotated gene.
+
+```{r QC pca plot, echo = FALSE}
+img <- readPNG("../results/pca_batch123.png")
+grid.raster(img)
+```
+
+```{r construct normalized ExpressionSets, include=FALSE, cache=TRUE}
+
+batch2 = list.files(path = "../data/TransplantCELs/batch2_2014", pattern = ".*CEL", all.files = FALSE, full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
+batch3 = list.files(path = "../data/TransplantCELs/batch3_2014", pattern = ".*CEL", all.files = FALSE, full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
+
+eset = rma_eset(CEL_list = c(batch2, batch3))
+
+```
+
+```{r filter for genes/probes with Entrez IDs, include=FALSE, cache=TRUE}
+# download this file from http://www.affymetrix.com/support/technical/annotationfilesmain.affx
+affy_annotation = "../data/HuGene-1_0-st-v1.na35.hg19.transcript.csv"
+
+eset <- gene_filter_eset(eset, affy_annotation)
+
+# extract the expression data and rotate so we have samples (rows) by genes (columns)
+expr_data <- t(eset@assayData$exprs)
+
+# change sample names to Tritan IDs
+rownames(expr_data) <- str_extract(rownames(expr_data), "[6][0-9][0-9]") # matches 601 - 699
+
+n_genes = ncol(expr_data)
+n_samples = nrow(expr_data)
+
+```
+
+
+```{r get phenotype data, include=FALSE}
+
+pheno_data <- read.csv("../data/full_phenotype_data.csv", header=TRUE)
+
+# get phenotypes for this batch only
+pheno_data <- pheno_data[pheno_data$Patient.number %in% rownames(expr_data), ]
+
+# remove missing data columns from pheno_data
+# columns with all NAs
+c_na = which(colSums(is.na(pheno_data)) == nrow(pheno_data))
+
+# columns with all NULL
+c_null = which(colSums(pheno_data == "NULL") == nrow(pheno_data))
+
+pheno_data <- pheno_data[, -c(c_na, c_null)]
+
+```
+
+Based on previous analysis, we set the soft thresholding parameter $k = 10$. For the batch 2 and 3 data, this parameter results in a graph topology which is approximately scale free (connections follow a power law), a standard assumption for biological data. We first build a dendrogram (hierarchichal cluster) relating the `r n_genes` in our analysis by topological overlap. The WGCNA dynamic cut algorithm will allow us to partition this dendrogram to define gene modules.
+
+```{r build tree and dynamic cut, echo=FALSE, fig.align='center', fig.width=10, cache=TRUE}
+soft_thresh_power = 10
+
+# note - this takes a long time and has been pre-calculated and saved
+#clust_out <- build_tree(expr_data, soft_thresh_power)
+#gene_tree = clust_out[[1]]
+#dissTOM = clust_out[[2]]
+
+# module identification using dynamic tree cut
+#modules = cutreeDynamic(dendro = gene_tree, distM = dissTOM,
+#deepSplit = 2, pamRespectsDendro = FALSE, minClusterSize = 30)
+#module_colors = labels2colors(modules)
+
+#save(gene_tree, module_colors, file = "../data/geneTree.RData")
+load("../data/geneTree.RData")
+
+# reset the new module colors to be the merged colors
+n_modules = length(unique(module_colors))
+
+```
+
+We can merge modules that are highly correlated - this will make visualizing results more meaningful.
+
+```{r merge highly correlated modules, include = FALSE}
+
+# merge highly correlated modules
+MEList = moduleEigengenes(expr_data, colors = module_colors)
+MEs = MEList$eigengenes
+
+# cut the tree at 0.20 (80% correlation)
+MEDissThres = 0.20
+
+merge = mergeCloseModules(expr_data, module_colors, cutHeight = MEDissThres, verbose = 3)
+merged_colors = merge$colors
+merged_MEs = merge$newMEs
+
+plotDendroAndColors(gene_tree, cbind(module_colors, merged_colors),
+c("Dynamic Tree Cut", "Merged dynamic"), dendroLabels = FALSE, hang = 0.03, addGuide = TRUE, guideHang = 0.05)
+
+smaller_mod_colors = module_colors
+module_colors = merged_colors
+n_modules = length(unique(module_colors))
+
+```
+
+## Correlating Module Eigengenes with Clinical Phenotypes
+
+Each module (collection of genes) will be represented by a single number which is the first principal component of the module `eigengene' or the linear combination of genes in the module that best captures the intra-module variance. Each sample will have a different value for the eigengene expression which can be correlated with clinical outcomes.
+
+First, we will analyze eigengene correlation against a variety of different clinical outcomes. Many outcomes will be continuous or integral, such as immunophenotyping data on T-cells or cold ischemia time and amenable to pearson correlation (assuming a linear relationship). For categorical or binary data we can use spearman rank correlation. 
+
+We will need to introduce an ordering to some categorical data that is not binary. One such example of an "ordered categorical" outcome will be Cytomegalovirus status in donor and recipient. We will code a donor/recipient negative/negative transplant as 0 (best prognosis), followed by 1 for negative/positive, 2 for positive/positive, and 3 for positive/negative (worst prognosis). We clearly do not expect this relationship to be linear, simply monotonically increasing, so a spearman rank correlation is the most appropriate choice. 
+
+We focus on the following clinical outcomes:
+
+```{r clinical outcomes, echo=FALSE}
+
+phenotypes <- c("RRT_length", "cold_ischemia_time", "DGF", "immunological_risk", "sensitized", "rejection", "viral_complication", "bacterial_complication", "fungal_complication", "number_HLAmm", "number_DRmm", "CMV_status", "CMV_IgG", "K_preTx", "IgG_level", "GFR_preTx", "CRP", "t_cell_immunophenotyping")
+
+data_type <- c("numeric", "numeric", "binary", "binary", "binary", "binary", "binary", "binary", "binary", "numeric", "numeric", "ordered_categorical", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric")
+
+correlation <- c("pearson", "pearson", "spearman", "spearman", "spearman", "spearman", "spearman", "spearman", "spearman", "pearson" , "pearson", "spearman", "pearson", "pearson", "pearson", "pearson", "pearson", "pearson")
+
+tab = cbind(phenotypes, data_type, correlation)[order(correlation), ]
+
+knit_print(kable(tab))
+
+```
+
+
+```{r split phenotype data into continuous and discrete, include=FALSE}
+
+continuous_colnames <- c("Length.of.RRT..months.", "CIT..hours.", "Number.of.MM", "Number.of.DR.MM", "IgG.level", "CMV_IgG", "K...pre.tx.", "eGFR.pre.tx")
+tcell_ip_colnames <- names(pheno_data)[grep("^CD",names(pheno_data))]
+
+continuous_pheno <- pheno_data[, c(continuous_colnames, tcell_ip_colnames)]
+
+discrete_pheno <- pheno_data[, c("Final.DGF.decision", "Immunological.risk", "Sensitised..Y.N.", "Final.biopsy.decision", "Infectious.complication", "CMV.donor", "CMV.recipient")]
+
+# 0 is none, 1 is DGF (Delayed Graft Function) - TODO: ask difference between DGF, functional DGF
+discrete_pheno$Final.DGF.decision[discrete_pheno$Final.DGF.decision == "functional DGF"] = "DGF"
+discrete_pheno$Final.DGF.decision <- factor(discrete_pheno$Final.DGF.decision, levels = c("none", "DGF"), ordered = TRUE)
+
+# 0 is low, 1 is I/H (intermediate/high?)
+discrete_pheno$Immunological.risk <- factor(discrete_pheno$Immunological.risk, levels = c("Low", "I/H"), ordered = TRUE )
+
+# 0 is N, 1 is Y - TODO: ask for raw score on this (percentage of autoreactivity to panel?)
+discrete_pheno$Sensitised..Y.N.[discrete_pheno$Sensitised..Y.N. %in% c("Y (highly)", "Y(highly)")] = "Y"
+discrete_pheno$sensitised <- factor(discrete_pheno$Sensitised..Y.N., levels = c("N", "Y"), ordered = TRUE)
+
+# PICK UP HERE coding the rest of the categorical variables
+discrete_pheno$rejection = grepl("Rejection", discrete_pheno$Final.biopsy.decision)
+
+# split Infectious.complication to viral_complication, bacterial_complication, fungal_complication
+discrete_pheno$viral_complication = grepl("Viral", discrete_pheno$Infectious.complication)
+discrete_pheno$bacterial_complication = grepl("Bacterial", discrete_pheno$Infectious.complication)
+discrete_pheno$fungal_complication = grepl("Fungal", discrete_pheno$Infectious.complication)
+
+
+# combine CMV donor/recipient into negative/negative (best), negative/positive (second best), positive/positive (third best), positive, negative (worst)
+# if else is chosen such that above becomes 1, 2, 3, 4
+discrete_pheno$CMV = ifelse(discrete_pheno$CMV.donor == "positive", 
+                                 ifelse(discrete_pheno$CMV.recipient == "positive", 3, 4),
+                                 ifelse(discrete_pheno$CMV.recipient == "negative", 1, 2))
+
+discrete_pheno <- discrete_pheno[,c("Final.DGF.decision", "Immunological.risk", "sensitised", "rejection", "CMV", "viral_complication", "fungal_complication", "bacterial_complication")]
+
+```
+
+Using a false discovery rate (FDR) cut-off of 0.01, we can visualize all of the clinical phenotypes for which there is at least one significantly correlated gene module. Correlation between gene module and clinical phenotype ranges from blue (perfectly anti-correlated) to white (uncorrelated) to red (perfectly correlated).
+
+```{r correlate eigengenes with continuous phenotypes, include=FALSE}
+
+# we will remove any phenotypes that have >75% missing data
+continuous_pheno <- continuous_pheno[ , colSums(is.na(continuous_pheno)) < n_samples*0.75]
+discrete_pheno <- discrete_pheno[ ,colSums(is.na(discrete_pheno)) < n_samples*0.75]
+
+MEs0 = moduleEigengenes(expr_data, module_colors)$eigengenes
+MEs = orderMEs(MEs0)
+
+fdr = 0.01
+
+# MEs will be n_samples x n_modules. values in particular column will be the eigengene expression (i.e. linear combination of module member genes that explains the most variance) for each sample 
+
+##### continuous traits #####
+
+# using the pearson correlation to correlate eigengene expression with continuous variables
+continuous_corr = WGCNA::cor(MEs, continuous_pheno, use = "p", method = "pearson")
+
+# continuous trait p values - adjust for number of tests
+continuous_p = corPvalueStudent(continuous_corr, n_samples)
+continuous_p = apply(continuous_p, MARGIN = 2, FUN = function(p) p.adjust(p, length(continuous_corr), method = "fdr"))
+
+lowest_p = apply(continuous_p, MARGIN = 2, FUN = min)
+
+# bonferonni p value correction
+display_corr = continuous_corr[ , lowest_p < fdr]
+display_p = continuous_p[ , lowest_p < fdr]
+
+sizeGrWindow(10,6)
+# Will display correlations and their p-values
+textMatrix = signif(display_corr, 2)
+
+# mark correlations with a * that fall below FDR 0.01
+textMatrix[display_p < fdr] = paste0(textMatrix[which(display_p < fdr)], "*")
+
+dim(textMatrix) = dim(display_corr)
+
+xlabs = names(continuous_pheno)[lowest_p < fdr]
+xlabs = paste0(xlabs, "*")
+
+# Display the correlation values within a heatmap plot
+pdf("../results/continuous_corr_heatmap.pdf")
+par(mar = c(8, 7.5, 3, 3));
+labeledHeatmap(Matrix = display_corr, xLabels = xlabs, yLabels = substring(names(MEs), first = 3), ySymbols = names(MEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1), main = paste("Module-trait relationships"), cex.lab.x = 0.75)
+dev.off()
+
+# note that labeledHeatmap does not render within knitr - need to save and load as a chunk
+
+```
+
+<center><img src="../results/continuous_corr_heatmap.pdf" align="middle"></center>
+
+We can do the same for discrete phenotypes. In this case, we plot all of the phenotypes and mark those with significant correlations (at false discovery rate of 0.01) with an asterisk.
+
+```{r discrete phenotypes, include = FALSE}
+##### discrete traits #####
+
+discrete_corr = cor(MEs, data.matrix(discrete_pheno), use = "p", method = "spearman")
+
+# continuous trait p values
+discrete_p = corPvalueStudent(discrete_corr, n_samples)
+discrete_p = apply(discrete_p, MARGIN = 2, FUN = function(p) p.adjust(p, length(discrete_corr), method = "fdr"))
+
+sizeGrWindow(10,6)
+# display correlation
+textMatrix = signif(discrete_corr, 2)
+
+# mark correlations with a * that fall below FDR 0.01
+fdr = 0.01
+textMatrix[which(discrete_p < fdr)] = paste0(textMatrix[which(discrete_p < fdr)], "*")
+
+dim(textMatrix) = dim(discrete_corr)
+
+xlabs = names(discrete_pheno)
+xlabs[which(colSums(discrete_p < 0.01) > 0)] = paste0(xlabs[which(colSums(discrete_p < 0.01) > 0)], "*")
+
+# Display the correlation values within a heatmap plot
+pdf("../results/discrete_corr_heatmap.pdf")
+par(mar = c(7, 7.5, 3, 3));
+labeledHeatmap(Matrix = discrete_corr, xLabels = xlabs, yLabels = substring(names(MEs), first = 3), ySymbols = names(MEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1), main = paste("Module-trait relationships for Discrete Clinical Outcomes"))
+dev.off()
+
+```
+
+<center><img src="../results/discrete_corr_heatmap.pdf" align="middle"}></center>
