@@ -2,15 +2,15 @@
 title: "Transplant Gene Expression Association with Clinical Outcomes"
 author: "Patrick Short"
 date: "June 1st - June 12th, 2015"
-output: pdf_document
+output: html_document
 ---
 
 ```{r global_options, include=FALSE}
-knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.align = "center",
-                      echo=FALSE, warning=FALSE, message=FALSE)
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.align = "center", echo=FALSE, warning=FALSE, message=FALSE)
 library(png)
 library(grid)
 library(knitr)
+library(ggplot2)
 ```
 
 ```{r scripts and dependencies, include=FALSE}
@@ -249,7 +249,7 @@ dev.off()
 
 ```
 
-<center><img src="../results/continuous_corr_heatmap.pdf" align="middle"></center>
+<center><img src="../results/continuous_corr_heatmap.pdf"></center>
 
 We can do the same for discrete phenotypes. In this case, we plot all of the phenotypes and mark those with significant correlations (at false discovery rate of 0.01) with an asterisk.
 
@@ -288,4 +288,46 @@ save(eset, module_colors, MEs, file = "../results/eset_batch23.RData")
 
 ```
 
-<center><img src="../results/discrete_corr_heatmap.pdf" align="middle"}></center>
+<center><img src="../results/discrete_corr_heatmap.pdf"}></center>
+
+## Gene Ontology Term Enrichment
+
+If these gene module to phenotype associations are real, then we expect the gene modules to be biologically informative in some way. One way to test that gene modules represent biologically meaningful groups of genes is to test for enrichment of Gene Ontology terms within each module.
+
+
+```{r GO enrichment by module, include=FALSE, cache=TRUE}
+
+all_entrez_ids = eset@featureData@data$EntrezID
+GOenr = GOenrichmentAnalysis(module_colors, all_entrez_ids, organism = "human", nBestP = 10);
+
+# get the table for best 10 terms over all three GO categories
+# table contains enrichment p value ($BonferoniP), ontology term ($termOntology), etc.
+GO_table = GOenr$bestPTerms[["BP, CC, MF"]]$enrichment
+
+GO_by_module = split(GO_table, f = GO_table$module)
+n_enriched_GO = sapply(GO_by_module, function(m) sum(m$BonferoniP < 0.05))
+
+```
+
+Out of the `r length(module_colors)` gene modules, `r sum(n_enriched_GO > 0)` have at least one GO term which is significantly enriched against the background (Bonferroni adjusted p-value < 0.05). Taking the ten terms per module with the lowest p-value, we can see that many of the modules have several enriched terms. Most of these terms are similar and imply a shared function or pathway of the gene module. A few of the modules have no apparent enrichment of biological terms. In fact, we expect this to be the case for the grey module (to which WGCNA assigns all genes left out of clusters).
+
+```{r plot number of enriched GO terms, echo=FALSE, fig.width = 8, fig.height = 6}
+
+mod_colors = as.character(names(n_enriched_GO))
+counts = as.integer(n_enriched_GO)
+
+qplot(x = mod_colors, y = counts, geom = "bar", stat="identity", fill = mod_colors) +
+  scale_fill_manual(values = mod_colors) + 
+  labs(x = "Module Colors", 
+       y = "Number of Enriched GO Terms (out of top 10)",
+       title = "Most Gene Modules are Highly Enriched for GO terms.") +
+  theme(axis.text.x = element_text(colour="black",size=16,angle=90,hjust=.5,vjust=.5),
+        plot.title = element_text(colour="black",size=20,angle=0,hjust=.5,vjust=.5),
+        axis.title =element_text(colour="black",size=16,angle=0,hjust=.5,vjust=.5)) + 
+  theme(panel.grid.minor = element_blank()) +
+  guides(fill = FALSE)
+
+
+```
+
+There are `r sum(n_enriched_GO == 0)` gene modules with no highly enriched GO terms (`r mod_colors[counts == 0]`). It is reassuring that we see the grey module in this list as we expect this module to consist of genes that were uncategorized into other modules.
