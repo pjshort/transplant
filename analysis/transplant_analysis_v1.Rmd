@@ -1,9 +1,10 @@
 ---
 title: "Transplant Gene Expression Association with Clinical Outcomes"
 author: "Patrick Short"
-date: "June 1st - June 10th, 2015"
-output: html_document
+date: "June 1st - June 12th, 2015"
+output: pdf_document
 ---
+
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.align = "center",
                       echo=FALSE, warning=FALSE, message=FALSE)
@@ -140,7 +141,7 @@ We focus on the following clinical outcomes:
 
 ```{r clinical outcomes, echo=FALSE}
 
-phenotypes <- c("RRT_length", "cold_ischemia_time", "DGF", "immunological_risk", "sensitized", "rejection", "viral_complication", "bacterial_complication", "fungal_complication", "number_HLAmm", "number_DRmm", "CMV_status", "CMV_IgG", "K_preTx", "IgG_level", "GFR_preTx", "CRP", "t_cell_immunophenotyping")
+phenotypes <- c("RRT_length", "cold_ischemia_time", "DGF", "immunological_risk", "sensitized", "rejection", "viral_complication", "bacterial_complication", "fungal_complication", "number_HLAmm", "number_DRmm", "CMV_status", "CMV_IgG", "K_preTx", "IgG_level", "GFR_preTx", "CRP", "t_cell_immunophenotyping<sup>+</sup>")
 
 data_type <- c("numeric", "numeric", "binary", "binary", "binary", "binary", "binary", "binary", "binary", "numeric", "numeric", "ordered_categorical", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric")
 
@@ -152,6 +153,7 @@ knit_print(kable(tab))
 
 ```
 
+<sup>+</sup>T cell immunophenotyping is not a single measure, but a large set of quantitative measures describing the T cell population by flow using the same aliquot of blood used to generate the gene expression data used in this analysis.
 
 ```{r split phenotype data into continuous and discrete, include=FALSE}
 
@@ -234,10 +236,13 @@ dim(textMatrix) = dim(display_corr)
 xlabs = names(continuous_pheno)[lowest_p < fdr]
 xlabs = paste0(xlabs, "*")
 
+ylabs = substring(names(MEs), first = 3)
+ylabs[rowSums(display_p < fdr) > 0] = paste0(ylabs[rowSums(display_p < fdr) > 0], "*")
+
 # Display the correlation values within a heatmap plot
 pdf("../results/continuous_corr_heatmap.pdf")
 par(mar = c(8, 7.5, 3, 3));
-labeledHeatmap(Matrix = display_corr, xLabels = xlabs, yLabels = substring(names(MEs), first = 3), ySymbols = names(MEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1), main = paste("Module-trait relationships"), cex.lab.x = 0.75)
+labeledHeatmap(Matrix = display_corr, xLabels = xlabs, yLabels = ylabs, ySymbols = names(MEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1), main = paste("Module-trait relationships for Continuous Clinical Measures"), cex.lab.x = 0.75)
 dev.off()
 
 # note that labeledHeatmap does not render within knitr - need to save and load as a chunk
@@ -268,13 +273,18 @@ textMatrix[which(discrete_p < fdr)] = paste0(textMatrix[which(discrete_p < fdr)]
 dim(textMatrix) = dim(discrete_corr)
 
 xlabs = names(discrete_pheno)
-xlabs[which(colSums(discrete_p < 0.01) > 0)] = paste0(xlabs[which(colSums(discrete_p < 0.01) > 0)], "*")
+xlabs[which(colSums(discrete_p < fdr) > 0)] = paste0(xlabs[which(colSums(discrete_p < 0.01) > 0)], "*")
+
+ylabs = substring(names(MEs), first = 3)
+ylabs[rowSums(discrete_p < fdr) > 0] = paste0(ylabs[rowSums(discrete_p < fdr) > 0], "*")
 
 # Display the correlation values within a heatmap plot
 pdf("../results/discrete_corr_heatmap.pdf")
 par(mar = c(7, 7.5, 3, 3));
-labeledHeatmap(Matrix = discrete_corr, xLabels = xlabs, yLabels = substring(names(MEs), first = 3), ySymbols = names(MEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1), main = paste("Module-trait relationships for Discrete Clinical Outcomes"))
+labeledHeatmap(Matrix = discrete_corr, xLabels = xlabs, yLabels = ylabs, ySymbols = names(MEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1), main = paste("Module-trait relationships for Discrete Clinical Outcomes"))
 dev.off()
+
+save(eset, module_colors, MEs, file = "../results/eset_batch23.RData")
 
 ```
 
