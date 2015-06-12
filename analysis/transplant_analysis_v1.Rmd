@@ -309,7 +309,7 @@ n_enriched_GO = sapply(GO_by_module, function(m) sum(m$BonferoniP < 0.05))
 
 ```
 
-Out of the `r length(module_colors)` gene modules, `r sum(n_enriched_GO > 0)` have at least one GO term which is significantly enriched against the background (Bonferroni adjusted p-value < 0.05). Taking the ten terms per module with the lowest p-value, we can see that many of the modules have several enriched terms. Most of these terms are similar and imply a shared function or pathway of the gene module. A few of the modules have no apparent enrichment of biological terms. In fact, we expect this to be the case for the grey module (to which WGCNA assigns all genes left out of clusters).
+Out of the `r length(n_enriched_GO)` gene modules, `r sum(n_enriched_GO > 0)` have at least one GO term which is significantly enriched against the background (Bonferroni adjusted p-value < 0.05). Taking the ten terms per module with the lowest p-value, we can see that many of the modules have several enriched terms. Most of these terms are similar and imply a shared function or pathway of the gene module. A few of the modules have no apparent enrichment of biological terms. In fact, we expect this to be the case for the grey module (to which WGCNA assigns all genes left out of clusters).
 
 ```{r plot number of enriched GO terms, echo=FALSE, fig.width = 8, fig.height = 6}
 
