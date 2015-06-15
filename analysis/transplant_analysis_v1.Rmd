@@ -69,7 +69,7 @@ n_samples = nrow(expr_data)
 pheno_data <- read.csv("../data/full_phenotype_data.csv", header=TRUE)
 
 # get phenotypes for this batch only
-pheno_data <- pheno_data[pheno_data$Patient.number %in% rownames(expr_data), ]
+pheno_data <- pheno_data[match(as.integer(rownames(expr_data)), pheno_data$Patient.number), ]
 
 # remove missing data columns from pheno_data
 # columns with all NAs
@@ -100,7 +100,6 @@ soft_thresh_power = 10
 #save(gene_tree, module_colors, file = "../data/geneTree.RData")
 load("../data/geneTree.RData")
 
-# reset the new module colors to be the merged colors
 n_modules = length(unique(module_colors))
 
 ```
@@ -125,6 +124,8 @@ c("Dynamic Tree Cut", "Merged dynamic"), dendroLabels = FALSE, hang = 0.03, addG
 
 smaller_mod_colors = module_colors
 module_colors = merged_colors
+
+# reset the new module colors to be the merged colors
 n_modules = length(unique(module_colors))
 
 ```
@@ -284,7 +285,7 @@ par(mar = c(7, 7.5, 3, 3));
 labeledHeatmap(Matrix = discrete_corr, xLabels = xlabs, yLabels = ylabs, ySymbols = names(MEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1), main = paste("Module-trait relationships for Discrete Clinical Outcomes"))
 dev.off()
 
-save(eset, module_colors, MEs, file = "../results/eset_batch23.RData")
+save(eset, module_colors, MEs, continuous_pheno, discrete_pheno, file = "../results/eset_batch23.RData")
 
 ```
 
@@ -330,4 +331,4 @@ qplot(x = mod_colors, y = counts, geom = "bar", stat="identity", fill = mod_colo
 
 ```
 
-There are `r sum(n_enriched_GO == 0)` gene modules with no highly enriched GO terms (`r mod_colors[counts == 0]`). It is reassuring that we see the grey module in this list as we expect this module to consist of genes that were uncategorized into other modules.
+There are `r sum(n_enriched_GO == 0)` gene modules with no highly enriched GO terms (`r mod_colors[counts == 0]`). It is reassuring that we see the grey module in this list as we expect this module to consist of genes that did cluster into any module.
