@@ -58,6 +58,8 @@ expr_data <- t(eset@assayData$exprs)
 # change sample names to Tritan IDs
 rownames(expr_data) <- str_extract(rownames(expr_data), "[6][0-9][0-9]") # matches 601 - 699
 
+colnames(eset) <- rownames(expr_data)
+
 n_genes = ncol(expr_data)
 n_samples = nrow(expr_data)
 
@@ -104,7 +106,7 @@ n_modules = length(unique(module_colors))
 
 ```
 
-We can merge modules that are highly correlated - this will make visualizing results more meaningful.
+We can merge modules that are highly correlated - these figures are included at the end of the documents (the ones presented below will be on un-merged modules).
 
 ```{r merge highly correlated modules, include = FALSE}
 
@@ -122,12 +124,6 @@ merged_MEs = merge$newMEs
 plotDendroAndColors(gene_tree, cbind(module_colors, merged_colors),
 c("Dynamic Tree Cut", "Merged dynamic"), dendroLabels = FALSE, hang = 0.03, addGuide = TRUE, guideHang = 0.05)
 
-smaller_mod_colors = module_colors
-module_colors = merged_colors
-
-# reset the new module colors to be the merged colors
-n_modules = length(unique(module_colors))
-
 ```
 
 ## Correlating Module Eigengenes with Clinical Phenotypes
@@ -142,11 +138,11 @@ We focus on the following clinical outcomes:
 
 ```{r clinical outcomes, echo=FALSE}
 
-phenotypes <- c("RRT_length", "cold_ischemia_time", "DGF", "immunological_risk", "sensitized", "rejection", "viral_complication", "bacterial_complication", "fungal_complication", "number_HLAmm", "number_DRmm", "CMV_status", "CMV_IgG", "K_preTx", "IgG_level", "GFR_preTx", "CRP", "t_cell_immunophenotyping<sup>+</sup>")
+phenotypes <- c("RRT_length", "cold_ischemia_time", "DGF", "immunological_risk", "sensitized", "rejection", "rejection_1wk", "rejection_2wk", "rejection_1month", "rejection_3month", "rejection_1yr", "viral_complication", "bacterial_complication", "fungal_complication", "number_HLAmm", "number_DRmm", "CMV_status", "CMV_IgG", "K_preTx", "IgG_level", "GFR_preTx", "CRP", "t_cell_immunophenotyping<sup>+</sup>")
 
-data_type <- c("numeric", "numeric", "binary", "binary", "binary", "binary", "binary", "binary", "binary", "numeric", "numeric", "ordered_categorical", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric")
+data_type <- c("numeric", "numeric", "binary", "binary", "binary", "binary","numeric", "numeric", "numeric", "numeric", "numeric", "binary", "binary", "binary", "numeric", "numeric", "ordered_categorical", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric")
 
-correlation <- c("pearson", "pearson", "spearman", "spearman", "spearman", "spearman", "spearman", "spearman", "spearman", "pearson" , "pearson", "spearman", "pearson", "pearson", "pearson", "pearson", "pearson", "pearson")
+correlation <- c("pearson", "pearson", "spearman", "spearman", "spearman", "spearman", "spearman", "spearman", "spearman", "spearman", "spearman","spearman", "spearman", "spearman", "pearson" , "pearson", "spearman", "pearson", "pearson", "pearson", "pearson", "pearson", "pearson")
 
 tab = cbind(phenotypes, data_type, correlation)[order(correlation), ]
 
@@ -156,6 +152,8 @@ knit_print(kable(tab))
 
 <sup>+</sup>T cell immunophenotyping is not a single measure, but a large set of quantitative measures describing the T cell population by flow using the same aliquot of blood used to generate the gene expression data used in this analysis.
 
+It is important to note that a pearson correlation is not used for all of the numeric phenotypes. A pearson correlation carries the assumption of a linear relationship and therefore may not be appropriate for an outcome such as the number of rejection episodes within the first month ($rejection_1month$) where we would not expect changes in gene expression to correlate linearly with the number of episodes, only monotonically (the spearman assumption).
+
 ```{r split phenotype data into continuous and discrete, include=FALSE}
 
 continuous_colnames <- c("Length.of.RRT..months.", "CIT..hours.", "Number.of.MM", "Number.of.DR.MM", "IgG.level", "CMV_IgG", "K...pre.tx.", "eGFR.pre.tx")
@@ -163,7 +161,7 @@ tcell_ip_colnames <- names(pheno_data)[grep("^CD",names(pheno_data))]
 
 continuous_pheno <- pheno_data[, c(continuous_colnames, tcell_ip_colnames)]
 
-discrete_pheno <- pheno_data[, c("Final.DGF.decision", "Immunological.risk", "Sensitised..Y.N.", "Final.biopsy.decision", "Infectious.complication", "CMV.donor", "CMV.recipient")]
+discrete_pheno <- pheno_data[, c("Final.DGF.decision", "Immunological.risk", "Sensitised..Y.N.", "Final.biopsy.decision", "Infectious.complication", "CMV.donor", "CMV.recipient", "Rejection.Days")]
 
 # 0 is none, 1 is DGF (Delayed Graft Function) - TODO: ask difference between DGF, functional DGF
 discrete_pheno$Final.DGF.decision[discrete_pheno$Final.DGF.decision == "functional DGF"] = "DGF"
@@ -191,60 +189,56 @@ discrete_pheno$CMV = ifelse(discrete_pheno$CMV.donor == "positive",
                                  ifelse(discrete_pheno$CMV.recipient == "positive", 3, 4),
                                  ifelse(discrete_pheno$CMV.recipient == "negative", 1, 2))
 
-discrete_pheno <- discrete_pheno[,c("Final.DGF.decision", "Immunological.risk", "sensitised", "rejection", "CMV", "viral_complication", "fungal_complication", "bacterial_complication")]
+
+# count the number of rejection events in each bin 0 to 1wk, 2wk, 1mo, 3mo, 1yr
+discrete_pheno$rejection_1wk <- sapply(pheno_data$Rejection.Days, function(s) sum(as.integer(strsplit(as.character(s),",")[[1]]) <= 7))
+discrete_pheno$rejection_2wk <- sapply(pheno_data$Rejection.Days, function(s) sum(as.integer(strsplit(as.character(s),",")[[1]]) <= 14))
+discrete_pheno$rejection_1month <- sapply(pheno_data$Rejection.Days, function(s) sum(as.integer(strsplit(as.character(s),",")[[1]]) <= 31))
+discrete_pheno$rejection_3month <- sapply(pheno_data$Rejection.Days, function(s) sum(as.integer(strsplit(as.character(s),",")[[1]]) <= 93))
+discrete_pheno$rejection_1yr <- sapply(pheno_data$Rejection.Days, function(s) sum(as.integer(strsplit(as.character(s),",")[[1]]) <= 365))
+
+
+discrete_pheno <- discrete_pheno[,c("Final.DGF.decision", "Immunological.risk", "sensitised", "rejection", "CMV", "viral_complication", "fungal_complication", "bacterial_complication", "rejection_1wk", "rejection_2wk", "rejection_1month", "rejection_3month", "rejection_1yr")]
+
+
 
 ```
 
-Using a false discovery rate (FDR) cut-off of 0.01, we can visualize all of the clinical phenotypes for which there is at least one significantly correlated gene module. Correlation between gene module and clinical phenotype ranges from blue (perfectly anti-correlated) to white (uncorrelated) to red (perfectly correlated).
+Using a false discovery rate (FDR) cut-off of 0.05, we can visualize all of the continuous phenotypes for which there is at least one significantly correlated gene module. Correlation between gene module and phenotype ranges from blue (perfectly anti-correlated) to white (uncorrelated) to red (perfectly correlated).
 
-```{r correlate eigengenes with continuous phenotypes, include=FALSE}
+The phenotypes labels for both continous and discrete measures are clustered by similarity across samples.
+
+```{r remove phenotypes with missing data and cluster, include=FALSE}
 
 # we will remove any phenotypes that have >75% missing data
 continuous_pheno <- continuous_pheno[ , colSums(is.na(continuous_pheno)) < n_samples*0.75]
 discrete_pheno <- discrete_pheno[ ,colSums(is.na(discrete_pheno)) < n_samples*0.75]
 
+# reorder discrete and continuous pheno by correlating columns
+cont_distance = 1 - adjacency(data.matrix(continuous_pheno), power = 1)
+cont_tree = hclust(as.dist(cont_distance), method="average")
+
+disc_distance = 1 - adjacency(data.matrix(discrete_pheno), power = 1)
+disc_tree = hclust(as.dist(disc_distance), method = "average")
+
+continuous_pheno <- continuous_pheno[ ,cont_tree$order]
+discrete_pheno <- discrete_pheno[ ,disc_tree$order]
+
+```
+
+
+```{r correlate eigengenes with continuous phenotypes, include=FALSE}
+
+
 MEs0 = moduleEigengenes(expr_data, module_colors)$eigengenes
 MEs = orderMEs(MEs0)
 
-fdr = 0.01
-
-# MEs will be n_samples x n_modules. values in particular column will be the eigengene expression (i.e. linear combination of module member genes that explains the most variance) for each sample 
-
-##### continuous traits #####
-
-# using the pearson correlation to correlate eigengene expression with continuous variables
-continuous_corr = WGCNA::cor(MEs, continuous_pheno, use = "p", method = "pearson")
-
-# continuous trait p values - adjust for number of tests
-continuous_p = corPvalueStudent(continuous_corr, n_samples)
-continuous_p = apply(continuous_p, MARGIN = 2, FUN = function(p) p.adjust(p, length(continuous_corr), method = "fdr"))
-
-lowest_p = apply(continuous_p, MARGIN = 2, FUN = min)
-
-# bonferonni p value correction
-display_corr = continuous_corr[ , lowest_p < fdr]
-display_p = continuous_p[ , lowest_p < fdr]
-
-sizeGrWindow(10,6)
-# Will display correlations and their p-values
-textMatrix = signif(display_corr, 2)
-
-# mark correlations with a * that fall below FDR 0.01
-textMatrix[display_p < fdr] = paste0(textMatrix[which(display_p < fdr)], "*")
-
-dim(textMatrix) = dim(display_corr)
-
-xlabs = names(continuous_pheno)[lowest_p < fdr]
-xlabs = paste0(xlabs, "*")
-
-ylabs = substring(names(MEs), first = 3)
-ylabs[rowSums(display_p < fdr) > 0] = paste0(ylabs[rowSums(display_p < fdr) > 0], "*")
+fdr = 0.05
 
 # Display the correlation values within a heatmap plot
-pdf("../results/continuous_corr_heatmap.pdf")
-par(mar = c(8, 7.5, 3, 3));
-labeledHeatmap(Matrix = display_corr, xLabels = xlabs, yLabels = ylabs, ySymbols = names(MEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1), main = paste("Module-trait relationships for Continuous Clinical Measures"), cex.lab.x = 0.75)
-dev.off()
+pheno_heat_fig(expr_data, module_colors, continuous_pheno, 
+               fname = "../results/continuous_corr_heatmap.pdf", 
+               signif_only = TRUE, fdr = fdr, colors_only = TRUE)
 
 # note that labeledHeatmap does not render within knitr - need to save and load as a chunk
 
@@ -252,44 +246,21 @@ dev.off()
 
 <center><img src="../results/continuous_corr_heatmap.pdf"></center>
 
-We can do the same for discrete phenotypes. In this case, we plot all of the phenotypes and mark those with significant correlations (at false discovery rate of 0.01) with an asterisk.
+We can do the same for discrete clinical outcomes. In this case, we plot all of the phenotypes and mark those with significant correlations (at false discovery rate of 0.01) with an asterisk.
 
 ```{r discrete phenotypes, include = FALSE}
 ##### discrete traits #####
 
-discrete_corr = cor(MEs, data.matrix(discrete_pheno), use = "p", method = "spearman")
+pheno_heat_fig(expr_data, module_colors, discrete_pheno, 
+               fname = "../results/discrete_corr_heatmap.pdf", 
+               signif_only = FALSE, fdr = fdr, colors_only = TRUE)
 
-# continuous trait p values
-discrete_p = corPvalueStudent(discrete_corr, n_samples)
-discrete_p = apply(discrete_p, MARGIN = 2, FUN = function(p) p.adjust(p, length(discrete_corr), method = "fdr"))
-
-sizeGrWindow(10,6)
-# display correlation
-textMatrix = signif(discrete_corr, 2)
-
-# mark correlations with a * that fall below FDR 0.01
-fdr = 0.01
-textMatrix[which(discrete_p < fdr)] = paste0(textMatrix[which(discrete_p < fdr)], "*")
-
-dim(textMatrix) = dim(discrete_corr)
-
-xlabs = names(discrete_pheno)
-xlabs[which(colSums(discrete_p < fdr) > 0)] = paste0(xlabs[which(colSums(discrete_p < 0.01) > 0)], "*")
-
-ylabs = substring(names(MEs), first = 3)
-ylabs[rowSums(discrete_p < fdr) > 0] = paste0(ylabs[rowSums(discrete_p < fdr) > 0], "*")
-
-# Display the correlation values within a heatmap plot
-pdf("../results/discrete_corr_heatmap.pdf")
-par(mar = c(7, 7.5, 3, 3));
-labeledHeatmap(Matrix = discrete_corr, xLabels = xlabs, yLabels = ylabs, ySymbols = names(MEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1), main = paste("Module-trait relationships for Discrete Clinical Outcomes"))
-dev.off()
 
 save(eset, module_colors, MEs, continuous_pheno, discrete_pheno, file = "../results/eset_batch23.RData")
 
 ```
 
-<center><img src="../results/discrete_corr_heatmap.pdf"}></center>
+<center><img src="../results/discrete_corr_heatmap.pdf"></center>
 
 ## Gene Ontology Term Enrichment
 
@@ -332,3 +303,21 @@ qplot(x = mod_colors, y = counts, geom = "bar", stat="identity", fill = mod_colo
 ```
 
 There are `r sum(n_enriched_GO == 0)` gene modules with no highly enriched GO terms (`r mod_colors[counts == 0]`). It is reassuring that we see the grey module in this list as we expect this module to consist of genes that did cluster into any module.
+
+Merged module phenotype correlation heat maps:
+
+```{r merged module heat maps, include=FALSE}
+pheno_heat_fig(expr_data, merged_colors, continuous_pheno, 
+               fname = "../results/continuous_corr_merged_heatmap.pdf", 
+               signif_only = TRUE, fdr = fdr)
+
+pheno_heat_fig(expr_data, merged_colors, discrete_pheno, 
+               fname = "../results/discrete_corr_merged_heatmap.pdf", 
+               signif_only = FALSE, fdr = fdr)
+
+```
+
+<center><img src="../results/continuous_corr_merged_heatmap.pdf"></center>
+<center><img src="../results/discrete_corr_merged_heatmap.pdf"></center>
+
+
