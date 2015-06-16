@@ -229,7 +229,6 @@ discrete_pheno <- discrete_pheno[ ,disc_tree$order]
 
 ```{r correlate eigengenes with continuous phenotypes, include=FALSE}
 
-
 MEs0 = moduleEigengenes(expr_data, module_colors)$eigengenes
 MEs = orderMEs(MEs0)
 
