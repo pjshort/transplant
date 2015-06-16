@@ -18,6 +18,7 @@ rma_eset <- function(CEL_list){
 
 # download this file from http://www.affymetrix.com/support/technical/annotationfilesmain.affx
 #affy_annotation = "../data/HuGene-1_0-st-v1.na35.hg19.transcript.csv"
+
 gene_filter_eset <- function(eset, affy_annotation){
   
   # take an expression set and affy annotation file and filter:
@@ -78,7 +79,7 @@ gene_filter_eset <- function(eset, affy_annotation){
   
   eset <- eset[haveEntrezId, ]
   
-  # Then, make sure each probe only maps to 1 entrezID
+  # make sure each probe only maps to 1 entrezID
   esIqr <- apply(exprs(eset), 1, IQR)
   uniqGenes <- findLargest(featureNames(eset), esIqr, "hugene10sttranscriptcluster")
   eset <- eset[uniqGenes, ]
@@ -94,5 +95,28 @@ gene_filter_eset <- function(eset, affy_annotation){
   
   
   return(eset)
+  
+}
+
+match_eset_probes <- function(discovery_eset, validation_eset) {
+  
+  # slices validation expression set to include only probes used in discovery set
+  
+  to_keep = featureNames(validation_eset) %in% fData(discovery_eset)$ID
+  validation_eset <- validation_eset[to_keep,]
+  featureNames(validation_eset) <- fData(discovery_eset)$Name
+  
+  metadata <- data.frame(labelDescription = c("Manufacturers ID", "Official Symbol", 
+                                              "EntrezID", "Chromosome", "Gene Name", 
+                                              "Affy Probe Status"), row.names=c("ID", "Name", "EntrezID", "Chromosome", "LongName","ProbeStatus"))
+  
+  features <- new("AnnotatedDataFrame", data = fData(discovery_eset), varMetadata = metadata)
+  featureData(validation_eset) <- features
+  
+  if (dim(discovery_eset)[1] != dim(validation_eset)[1]){
+    stop("Genes/probes in discovery set not equal to validation set. Check eset_tools::match_eset_probes for troubleshooting.")
+  }
+  
+  return(validation_eset)
   
 }
