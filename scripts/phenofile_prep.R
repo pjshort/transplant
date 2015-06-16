@@ -14,21 +14,20 @@ pheno_data <- pheno_data[, -c(c_na, c_null)]
 continuous_colnames <- c("Patient.number", "Length.of.RRT..months.", "CIT..hours.", "Number.of.MM", "Number.of.DR.MM", "IgG.level", "CMV_IgG", "K...pre.tx.", "eGFR.pre.tx")
 tcell_ip_colnames <- names(pheno_data)[grep("^CD",names(pheno_data))]
 continuous_pheno <- pheno_data[, c(continuous_colnames, tcell_ip_colnames)]
+names(continuous_pheno)[1] = "patient_number"
 
 # get discrete data of interest
 discrete_pheno <- pheno_data[, c("Patient.number", "Final.DGF.decision", "Immunological.risk", "Sensitised..Y.N.", "Final.biopsy.decision", "Infectious.complication", "CMV.donor", "CMV.recipient", "Rejection.Days")]
 
 ### transforming discrete data to ordered/binary ###
 # 0 is none, 1 is DGF (Delayed Graft Function) - TODO: ask difference between DGF, functional DGF
-discrete_pheno$Final.DGF.decision[discrete_pheno$Final.DGF.decision == "functional DGF"] = "DGF"
-discrete_pheno$Final.DGF.decision <- factor(discrete_pheno$Final.DGF.decision, levels = c("none", "DGF"), ordered = TRUE)
+discrete_pheno$final_DGF_decision <- grepl("DGF", as.character(discrete_pheno$Final.DGF.decision))
 
 # 0 is low, 1 is I/H (intermediate/high?)
-discrete_pheno$Immunological.risk <- factor(discrete_pheno$Immunological.risk, levels = c("Low", "I/H"), ordered = TRUE )
+discrete_pheno$immunological_risk = !grepl("Low", as.character(discrete_pheno$Immunological.risk))
 
 # 0 is N, 1 is Y - TODO: ask for raw score on this (percentage of autoreactivity to panel?)
-discrete_pheno$Sensitised..Y.N.[discrete_pheno$Sensitised..Y.N. %in% c("Y (highly)", "Y(highly)")] = "Y"
-discrete_pheno$sensitised <- factor(discrete_pheno$Sensitised..Y.N., levels = c("N", "Y"), ordered = TRUE)
+discrete_pheno$sensitised <- grepl("Y", discrete_pheno$Sensitised..Y.N.)
 
 # true/false rejection at all
 discrete_pheno$rejection = grepl("Rejection", discrete_pheno$Final.biopsy.decision)
@@ -51,13 +50,13 @@ discrete_pheno$CMV = ifelse(discrete_pheno$CMV.donor == "positive",
                             ifelse(discrete_pheno$CMV.recipient == "positive", 3, 4),
                             ifelse(discrete_pheno$CMV.recipient == "negative", 1, 2))
 
-discrete_pheno <- discrete_pheno[,c("Patient.number", "Final.DGF.decision", "Immunological.risk", 
+discrete_pheno <- discrete_pheno[,c("Patient.number", "final_DGF_decision", "immunological_risk", 
                                     "sensitised", "rejection", "rejection_1wk", "rejection_2wk", 
                                     "rejection_1month", "rejection_3month", "rejection_1yr", 
                                     "CMV", "viral_complication", "fungal_complication", 
                                     "bacterial_complication")]
+names(discrete_pheno)[1] = "patient_number"
 
-write.csv(continuous_pheno, "../data/transplant_continuous_phenotypes.csv", quote = FALSE, row.names = FALSE)
-write.csv(discrete_pheno, "../data/transplant_discrete_phenotypes.csv", quote = FALSE, row.names = FALSE)
-
+write.csv(continuous_pheno, "../data/transplant_continuous_phenotypes.csv", row.names = FALSE)
+write.csv(discrete_pheno, "../data/transplant_discrete_phenotypes.csv", row.names = FALSE)
 
