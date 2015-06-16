@@ -11,7 +11,7 @@ library(stringr)
 library(oligo)
 library(WGCNA)
 source("../scripts/eset_tools.R")
-source("../scripts/cluster_tools.R")
+source("../scripts/cluster_tools.R")g
 source("../scripts/correlation_tools.R")
 options(stringsAsFactors = FALSE)
 allowWGCNAThreads()
