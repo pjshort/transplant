@@ -11,14 +11,14 @@ significant_corrs <- function(MEs, phenotypes, method = "pearson", fdr = 0.05){
   p = corPvalueStudent(corr, n_samples)
   
   # benjamini-hochberg error rate correction
-  p = apply(p, MARGIN = 2, FUN = function(p) p.adjust(p, length(corr), method = "fdr"))
+  p_adjust = apply(p, MARGIN = 2, FUN = function(p) p.adjust(p, length(corr), method = "fdr"))
   
   # get row and column with adjusted p < false discovery rate
-  l = which(p < fdr, arr.ind = TRUE)
+  l = which(p_adjust < fdr, arr.ind = TRUE)
   modules = names(MEs)[l[,1]]
   traits = colnames(phenotypes)[l[,2]]
   
-  associations <- data.frame(cbind(modules, traits))
+  associations <- data.frame(cbind(modules, traits, corr, p))
   return(associations)
   
 }
