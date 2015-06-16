@@ -1,0 +1,64 @@
+---
+title: "Validation Gene Module to Phenotype Correlations"
+author: "Patrick Short"
+date: "June 13th - 18th, 2015"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.align = "center", echo=FALSE, warning=FALSE, message=FALSE)
+library(png)
+library(grid)
+library(knitr)
+library(ggplot2)
+```
+
+```{r libraries and dependencies, include=FALSE}
+source("../scripts/eset_tools.R")
+source("../scripts/cluster_tools.R")
+library(stringr)
+library(WGCNA)
+```
+
+Using Weighted Gene Coexpression Network Analysis (WGCNA), genes have been assembled into a weighted network using correlation across all of the discovery samples. This network can be partitioned into gene modules based on the topological overlap (i.e. maximizing within-module closeness and between module distance). Correlating these gene modules with clinical outcomes and cellular immunophenotypes (collectively referred to as phenotypes in this analysis) may allow for the prediction of transplant outcomes (including DGF, rejection, and infections) using gene expression data.
+
+To test the robustness of the signals we see in the discovery cohort (64 samples), we can project the gene modules determined in the discovery cohort onto the test set and evaluate any gene module to phenotype correlations.
+
+To fully describe the gene module decomposition from the discovery analysis, we only need to recall two data pieces:
+ 1. The mapping from each gene (marked by a single probe) to the module color the gene is a member of, stored in the $module_colors$ variable.
+ 2. The discovery expression set - this will be used to match on probe IDs and gene names to ensure gene modules match between discovery and validation.
+
+The eigengene expression for each sample for each module in the validation set is the first principal component of the expression matrix for the module (number of samples x number of genes in module). Thus, each sample will be reduced from 18,000+ gene expression values to several dozen (one value for each module which is the first principal component of that module).
+
+
+```{r discovery module assignments, include=TRUE}
+load("../results/batch23_modules.RData")
+```
+
+In this analysis, we have actually load two different module specifications - $module_colors$ and $merged_colors$ where $merged_colors$ is a smaller number of slightly larger modules for which resulting from the merging of original modules with >80% eigengene correlation.
+
+We can generate normalized expression data for the validation set, matching on the correct probe IDs, and use the pre-defined gene modules to generate eigengene values for each sample.
+
+```{r validation set expression data, include=FALSE}
+
+batch1 = list.files(path = "../data/TransplantCELs/batch1_2009", pattern = ".*CEL", all.files = FALSE, full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
+validation_eset = rma_eset(CEL_list = batch1)
+
+# filter for genes/probes with entrez ID - this will have the same set of genes as eset23
+validation_eset <- match_eset_probes(discovery_eset, validation_eset)
+
+# extract the expression data and rotate so we have samples (rows) by genes (columns)
+expr_data <- t(exprs(validation_eset))
+
+# change sample names to Tritan IDs
+rownames(expr_data) <- str_extract(rownames(expr_data), "[6][0-9][0-9]") # matches 601 - 699
+
+colnames(validation_eset) <- rownames(expr_data)
+
+n_genes = ncol(expr_data)
+n_samples = nrow(expr_data)
+
+```
+
+
+
