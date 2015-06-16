@@ -11,7 +11,7 @@ c_null = which(colSums(pheno_data == "NULL") == nrow(pheno_data))
 pheno_data <- pheno_data[, -c(c_na, c_null)]
 
 # get continuous data of interest
-continuous_colnames <- c("Patient.number", "Length.of.RRT..months.", "CIT..hours.", "Number.of.MM", "Number.of.DR.MM", "IgG.level", "CMV_IgG", "K...pre.tx.", "eGFR.pre.tx")
+continuous_colnames <- c("Patient.number", "CIT..hours.", "Number.of.MM", "Number.of.DR.MM", "IgG.level", "CMV_IgG", "K...pre.tx.", "eGFR.pre.tx")
 tcell_ip_colnames <- names(pheno_data)[grep("^CD",names(pheno_data))]
 continuous_pheno <- pheno_data[, c(continuous_colnames, tcell_ip_colnames)]
 names(continuous_pheno)[1] = "patient_number"
